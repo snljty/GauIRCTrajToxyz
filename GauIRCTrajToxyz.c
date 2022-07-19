@@ -411,6 +411,7 @@ int main(int argc, char const *argv[])
     printf("Input file name: \"%s\".\n", ifl_name);
     printf("Number of atoms: %d.\n", num_atoms);
     printf("Number of frames: %d.\n", num_frames);
+    printf("Index of the frame correspond to transition state: %d.\n", num_frames - ind_reverse_beg_frame + 2);
     printf("The result has been saved to \"%s\".\n", ofl_name);
     printf("Everything is done!\n");
     if (! (argc - 1))
