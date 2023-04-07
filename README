@@ -1,1 +1,2 @@
-Split Gaussian IRC output trajectory to a multi-frame xyz file with energy in the comment line.
+Convert Gaussian IRC output trajectory to a multi-frame xyz file with energy in the comment line.
+Supports one file with IRC on both sides, or two seperated files with IRC on each side individually.

@@ -1,6 +1,7 @@
 # include <stdio.h>
 # include <stdlib.h>
 # include <string.h>
+# include <stdbool.h>
 
 int const num_dims = 3;
 
@@ -43,12 +44,18 @@ inline double Get_atom_coordinate_value(double const *atom_coordinaes, int num_a
 
 void Get_atom_names_and_coordinates(int num_input_files, int num_frames_reverse, int num_frames_forward, int num_atoms, \
     char const *ifl_name_reverse, char const *ifl_name_forward, char const *ifl_name, char *line, \
-    int *atom_indices, double *atom_coordinaes);
+    int *atom_indices, double *atom_coordinaes, double *energies, char const *energy_type_str);
 
 void Check_backup_name(char const *ofl_name, char const *ofl_name_bak);
 
 void Write_traj(char const *ofl_name, int num_frames_reverse, int num_frames_forward, int num_atoms, \
-    int const *atom_indices, double const *atom_coordinaes);
+    int const *atom_indices, double const *atom_coordinaes, double const *energies, char const *energy_type_str);
+
+void Get_energy_type(int num_input_files, char *energy_type_str, \
+    char const *ifl_name_reverse, char const *ifl_name_forward, char const *ifl_name, char *line);
+
+void Get_energy(FILE *ifl, char *line, char const *energy_type_str, double *energy_ptr);
+
 
 int main(int argc, char const **argv)
 {
@@ -62,22 +69,29 @@ int main(int argc, char const **argv)
     double *atom_coordinaes = NULL;
     char const ofl_name[] = "IRC_traj.xyz";
     char const ofl_name_bak[] = "IRC_traj.bak";
+    char energy_type_str[0x10 + 1] = "";
+    double *energies = NULL;
 
     num_input_files = Get_input_file_name(argc, argv, ifl_name_reverse, ifl_name_forward, ifl_name, line);
+    Get_energy_type(num_input_files, energy_type_str, ifl_name_reverse, ifl_name_forward, ifl_name, line);
+    printf("energy_type_str = \"%s\".\n", energy_type_str);
     Get_num_frames(num_input_files, & num_frames_reverse, & num_frames_forward, ifl_name_reverse, ifl_name_forward, ifl_name, line);
     num_frames = num_frames_reverse + 1 + num_frames_forward;
     Get_num_atoms(num_input_files, & num_atoms, ifl_name_reverse, ifl_name_forward, ifl_name, line);
     atom_indices = (int *)malloc(num_atoms * sizeof(int));
     atom_coordinaes = (double *)malloc(num_frames * num_atoms * num_dims * sizeof(double));
+    energies = (double *)malloc(num_frames * sizeof(double));
     Get_atom_names_and_coordinates(num_input_files, num_frames_reverse, num_frames_forward, num_atoms, \
-        ifl_name_reverse, ifl_name_forward, ifl_name, line, atom_indices, atom_coordinaes);
+        ifl_name_reverse, ifl_name_forward, ifl_name, line, atom_indices, atom_coordinaes, energies, energy_type_str);
     Check_backup_name(ofl_name, ofl_name_bak);
-    Write_traj(ofl_name, num_frames_reverse, num_frames_forward, num_atoms, atom_indices, atom_coordinaes);
+    Write_traj(ofl_name, num_frames_reverse, num_frames_forward, num_atoms, atom_indices, atom_coordinaes, energies, energy_type_str);
 
     free(atom_indices);
     atom_indices = NULL;
     free(atom_coordinaes);
     atom_coordinaes = NULL;
+    free(energies);
+    energies = NULL;
 
     return 0;
 }
@@ -281,7 +295,7 @@ void Get_num_frames(int num_input_files, int *num_frames_reverse_ptr, int *num_f
         ifl = fopen(ifl_name, "rt");
         while (fgets(line, BUFSIZ, ifl))
         {
-            if (strstr(line, "Calculation of FORWARD path complete."))
+            if (strstr(line, "Calculation of FORWARD path complete"))
             {
                 break;
             }
@@ -354,7 +368,7 @@ void Get_num_atoms(int num_input_files, int *num_atoms_ptr, char const *ifl_name
 
 void Get_atom_names_and_coordinates(int num_input_files, int num_frames_reverse, int num_frames_forward, int num_atoms, \
     char const *ifl_name_reverse, char const *ifl_name_forward, char const *ifl_name, char *line, \
-    int *atom_indices, double *atom_coordinaes)
+    int *atom_indices, double *atom_coordinaes, double *energies, char const *energy_type_str)
 {
     int ind_frame, ind_atom;
     FILE *ifl = NULL;
@@ -387,6 +401,7 @@ void Get_atom_names_and_coordinates(int num_input_files, int num_frames_reverse,
                         coord_pos = Get_atom_coordinate_ptr(atom_coordinaes, num_atoms, ind_frame, ind_atom);
                         sscanf(line, "%*d%d%*d%lg%lg%lg", atom_indices + ind_atom, coord_pos, coord_pos + 1, coord_pos + 2);
                     }
+                    Get_energy(ifl, line, energy_type_str, energies + ind_frame);
                 }
             }
         }
@@ -411,6 +426,7 @@ void Get_atom_names_and_coordinates(int num_input_files, int num_frames_reverse,
                         coord_pos = Get_atom_coordinate_ptr(atom_coordinaes, num_atoms, ind_frame, ind_atom);
                         sscanf(line, "%*d%d%*d%lg%lg%lg", atom_indices + ind_atom, coord_pos, coord_pos + 1, coord_pos + 2);
                     }
+                    Get_energy(ifl, line, energy_type_str, energies + ind_frame);
                 }
             }
         }
@@ -441,6 +457,7 @@ void Get_atom_names_and_coordinates(int num_input_files, int num_frames_reverse,
                         coord_pos = Get_atom_coordinate_ptr(atom_coordinaes, num_atoms, ind_frame, ind_atom);
                         sscanf(line, "%*d%d%*d%lg%lg%lg", atom_indices + ind_atom, coord_pos, coord_pos + 1, coord_pos + 2);
                     }
+                    Get_energy(ifl, line, energy_type_str, energies + ind_frame);
                 }
             }
         }
@@ -467,6 +484,7 @@ void Get_atom_names_and_coordinates(int num_input_files, int num_frames_reverse,
                         coord_pos = Get_atom_coordinate_ptr(atom_coordinaes, num_atoms, ind_frame, ind_atom);
                         sscanf(line, "%*d%d%*d%lg%lg%lg", atom_indices + ind_atom, coord_pos, coord_pos + 1, coord_pos + 2);
                     }
+                    Get_energy(ifl, line, energy_type_str, energies + ind_frame);
                 }
             }
         }
@@ -502,7 +520,7 @@ void Check_backup_name(char const *ofl_name, char const *ofl_name_bak)
 }
 
 void Write_traj(char const *ofl_name, int num_frames_reverse, int num_frames_forward, int num_atoms, \
-    int const *atom_indices, double const *atom_coordinaes)
+    int const *atom_indices, double const *atom_coordinaes, double const *energies, char const *energy_type_str)
 {
     char const *elements_list[] = {"", \
          "H" , "He", "Li", "Be", "B" , "C" , "N" , "O" , \
@@ -521,14 +539,13 @@ void Write_traj(char const *ofl_name, int num_frames_reverse, int num_frames_for
          "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn", \
          "Nh", "Fl", "Mc", "Lv", "Ts", "Og"};
     int ind_frame, ind_atom;
-    FILE *ofl = NULL;
+    FILE *ofl = fopen(ofl_name, "wt");
     double const* coord_pos = NULL;
 
-    ofl = fopen(ofl_name, "wt");
     for (ind_frame = 0; ind_frame < num_frames_reverse; ++ ind_frame)
     {
         fprintf(ofl, "%d\n", num_atoms);
-        fprintf(ofl, "TS %+d\n", ind_frame - num_frames_reverse);
+        fprintf(ofl, "TS%+d, Energy = %.8lf, Energy type = \"%s\"\n", ind_frame - num_frames_reverse, energies[ind_frame], energy_type_str);
         for (ind_atom = 0; ind_atom < num_atoms; ++ ind_atom)
         {
             coord_pos = Get_atom_coordinate_ptr((double *)atom_coordinaes, num_atoms, ind_frame, ind_atom);
@@ -538,7 +555,7 @@ void Write_traj(char const *ofl_name, int num_frames_reverse, int num_frames_for
     }
     ind_frame = num_frames_reverse;
     fprintf(ofl, "%d\n", num_atoms);
-    fprintf(ofl, "TS\n");
+    fprintf(ofl, "TS, Energy = %.8lf, Energy type = \"%s\"\n", energies[ind_frame], energy_type_str);
     for (ind_atom = 0; ind_atom < num_atoms; ++ ind_atom)
     {
         coord_pos = Get_atom_coordinate_ptr((double *)atom_coordinaes, num_atoms, ind_frame, ind_atom);
@@ -548,7 +565,7 @@ void Write_traj(char const *ofl_name, int num_frames_reverse, int num_frames_for
     for (ind_frame = num_frames_reverse + 1; ind_frame < num_frames_reverse + 1 + num_frames_forward; ++ ind_frame)
     {
         fprintf(ofl, "%d\n", num_atoms);
-        fprintf(ofl, "TS %+d\n", ind_frame - num_frames_reverse);
+        fprintf(ofl, "TS%+d, Energy = %.8lf, Energy type = \"%s\"\n", ind_frame - num_frames_reverse, energies[ind_frame], energy_type_str);
         for (ind_atom = 0; ind_atom < num_atoms; ++ ind_atom)
         {
             coord_pos = Get_atom_coordinate_ptr((double *)atom_coordinaes, num_atoms, ind_frame, ind_atom);
@@ -563,3 +580,152 @@ void Write_traj(char const *ofl_name, int num_frames_reverse, int num_frames_for
     return;
 }
 
+void Get_energy_type(int num_input_files, char *energy_type_str, \
+    char const *ifl_name_reverse, char const *ifl_name_forward, char const *ifl_name, char *line)
+{
+    FILE *ifl = fopen(num_input_files == 1 ? ifl_name : ifl_name_reverse, "rt");
+
+    while (true)
+    {
+        if (! fgets(line, BUFSIZ, ifl))
+        {
+            fprintf(stderr, "Error! Cannot determine energy type.\n");
+            fclose(ifl);
+            ifl = NULL;
+            exit(EXIT_FAILURE);
+        }
+        if (strstr(line, "Energy="))
+        {
+            strcpy(energy_type_str, "MM");
+            break;
+        }
+        if (strstr(line, "SCF Done"))
+        {
+            break;
+        }
+    }
+    if (strcmp(energy_type_str, "MM")) /* found "SCF Done" */
+    {
+        while (true)
+        {
+            if (! fgets(line, BUFSIZ, ifl) || strstr(line, "Population analysis"))
+            {
+                strcpy(energy_type_str, "SCF");
+                break;
+            }
+            if (strstr(line, "EUMP2 ="))
+            {
+                strcpy(energy_type_str, "MP2");
+                break;
+            }
+            if (! strncmp(line, " E2(", strlen(" E2(")))
+            {
+                strcpy(energy_type_str, "DFTPT2");
+                break;
+            }
+            if (strstr(line, "E(CIS/TDA)"))
+            {
+                strcpy(energy_type_str, "CIS/TDA");
+                break;
+            }
+            if (strstr(line, "E(TD-HF/TD-DFT)"))
+            {
+                strcpy(energy_type_str, "TD");
+                break;
+            }
+        }
+    }
+    fclose(ifl);
+    ifl = NULL;
+
+    return;
+}
+
+void Get_energy(FILE *ifl, char *line, char const *energy_type_str, double *energy_ptr)
+{
+    char *tok = NULL;
+
+    if (! strcmp(energy_type_str, "MM"))
+    {
+        while (fgets(line, BUFSIZ, ifl))
+        {
+            if (tok = strstr(line, "Energy="))
+            {
+                break;
+            }
+        }
+        tok += strlen("Energy=");
+        sscanf(tok, "%lg", energy_ptr);
+    }
+    else if (! strcmp(energy_type_str, "SCF"))
+    {
+        while (fgets(line, BUFSIZ, ifl))
+        {
+            if (strstr(line, "SCF Done"))
+            {
+                break;
+            }
+        }
+        tok = strchr(line, '=') + strlen("=");
+        sscanf(tok, "%lg", energy_ptr);
+    }
+    else if (! strcmp(energy_type_str, "MP2"))
+    {
+        while (fgets(line, BUFSIZ, ifl))
+        {
+            if (tok = strstr(line, "EUMP2"))
+            {
+                break;
+            }
+        }
+        tok = strchr(tok, ' ') + strlen("=");
+        * strchr(tok, 'D') = 'E';
+        sscanf(tok, "%lg", energy_ptr);
+    }
+    else if (! strcmp(energy_type_str, "DFTPT2"))
+    {
+        while (fgets(line, BUFSIZ, ifl))
+        {
+            if (! strncmp(line, " E2(", strlen(" E2(")))
+            {
+                break;
+            }
+        }
+        tok = strstr(line, "E(");
+        tok = strchr(tok, '=') + strlen("=");
+        * strchr(tok, 'D') = 'E';
+        sscanf(tok, "%lg", energy_ptr);
+    }
+    else if (! strcmp(energy_type_str, "CIS/TDA"))
+    {
+        while (fgets(line, BUFSIZ, ifl))
+        {
+            if (tok = strstr(line, "E(CIS/TDA)"))
+            {
+                break;
+            }
+        }
+        tok = strchr(line, '=') + strlen("=");
+        sscanf(tok, "%lg", energy_ptr);
+    }
+    else if (! strcmp(energy_type_str, "TD"))
+    {
+        while (fgets(line, BUFSIZ, ifl))
+        {
+            if (tok = strstr(line, "E(TD-HF/TD-DFT)"))
+            {
+                break;
+            }
+        }
+        tok = strchr(line, '=') + strlen("=");
+        sscanf(tok, "%lg", energy_ptr);
+    }
+    else
+    {
+        /* should never happen */
+        ;
+    }
+    tok = NULL;
+
+    return;
+}
